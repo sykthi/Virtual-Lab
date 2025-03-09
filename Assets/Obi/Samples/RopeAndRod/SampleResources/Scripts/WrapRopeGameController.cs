@@ -47,14 +47,14 @@ public class WrapRopeGameController : MonoBehaviour
 			onFinish.Invoke();
 	}
 
-	private void Solver_OnCollision(ObiSolver s, ObiSolver.ObiCollisionEventArgs e)
+	private void Solver_OnCollision(ObiSolver s, ObiNativeContactList e)
 	{
 		// reset to unwrapped state:
 		foreach (var wrappable in wrappables)
 			wrappable.Reset();
 
 		var world = ObiColliderWorld.GetInstance();
-		foreach (Oni.Contact contact in e.contacts)
+		foreach (Oni.Contact contact in e)
 		{
 			// look for actual contacts only:
 			if (contact.distance < 0.025f)

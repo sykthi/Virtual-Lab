@@ -4,7 +4,7 @@ using System.Collections;
 
 namespace Obi
 {
-    [AddComponentMenu("Physics/Obi/Obi Rope Cursor", 882)]
+    [AddComponentMenu("Physics/Obi/Obi Rope Cursor", 883)]
     [RequireComponent(typeof(ObiRope))]
     public class ObiRopeCursor : MonoBehaviour
     {
@@ -20,6 +20,7 @@ namespace Obi
 
         ObiStructuralElement m_CursorElement = null;
         private int m_SourceIndex = -1;
+        private float lengthChange = 0;
 
         public float cursorMu
         {
@@ -61,13 +62,20 @@ namespace Obi
             }
         }
 
-        private void Awake()
+        private void OnEnable()
         {
             rope = GetComponent<ObiRope>();
 
             rope.OnElementsGenerated += Actor_OnElementsGenerated;
+            rope.OnSimulationStart += Rope_OnSimulate;
             if (rope.elements != null && rope.elements.Count > 0)
                 Actor_OnElementsGenerated(rope);
+        }
+
+        private void OnDisable()
+        {
+            rope.OnElementsGenerated -= Actor_OnElementsGenerated;
+            rope.OnSimulationStart -= Rope_OnSimulate;
         }
 
         private void Actor_OnElementsGenerated(ObiActor actor)
@@ -76,68 +84,12 @@ namespace Obi
             UpdateSource();
         }
 
-        private void OnDestroy()
+        private void Rope_OnSimulate(ObiActor actor, float simulatedTime, float substepTime)
         {
-            rope.OnElementsGenerated -= Actor_OnElementsGenerated;
-        }
-
-        public void UpdateCursor()
-        {
-            rope = GetComponent<ObiRope>();
-            m_CursorElement = null;
-            if (rope.isLoaded)
-            {
-                float elmMu;
-                m_CursorElement = rope.GetElementAt(cursorMu, out elmMu);
-            }
-        }
-
-        public void UpdateSource()
-        {
-            rope = GetComponent<ObiRope>();
-            m_SourceIndex = -1;
-            if (rope.isLoaded)
-            {
-                float elmMu;
-                var elm = rope.GetElementAt(sourceMu, out elmMu);
-                if (elm != null && rope.solver != null)
-                {
-                    m_SourceIndex = elmMu < 0.5f ? elm.particle1 : elm.particle2;
-                }
-            }
-        }
-
-        private int AddParticleAt(int index)
-        {
-            // Copy data from the particle where we will insert new particles, to the particles we will insert:
-            int targetIndex = rope.activeParticleCount;
-            rope.CopyParticle(rope.solver.particleToActor[m_SourceIndex].indexInActor, targetIndex);
-
-            // Move the new particle to the one at the place where we will insert it:
-            rope.TeleportParticle(targetIndex, rope.solver.positions[rope.solverIndices[index]]);
-
-            // Activate the particle:
-            rope.ActivateParticle(targetIndex);
-            return rope.solverIndices[targetIndex];
-        }
-
-        private void RemoveParticleAt(int index)
-        {
-            rope.DeactivateParticle(index);
-        }
-
-        public void ChangeLength(float newLength)
-        {
-            if (!rope.isLoaded)
+            if (!rope.isLoaded || Mathf.Abs(lengthChange) < 0.00001f)
                 return;
 
             var solver = rope.solver;
-
-            // clamp new length to sane limits:
-            newLength = Mathf.Clamp(newLength, 0, (rope.sourceBlueprint.particleCount - 1) * rope.ropeBlueprint.interParticleDistance);
-
-            // calculate the change in rope length:
-            float lengthChange = newLength - rope.restLength;
 
             // remove:
             if (lengthChange < 0)
@@ -155,26 +107,26 @@ namespace Obi
                         // positive direction:
                         if (direction)
                         {
-                            RemoveParticleAt(solver.particleToActor[m_CursorElement.particle2].indexInActor);
-                            rope.elements.RemoveAt(index);
-
                             if (index < rope.elements.Count)
                             {
+                                RemoveParticleAt(solver.particleToActor[m_CursorElement.particle2].indexInActor);
+                                rope.elements.RemoveAt(index);
+
                                 if (rope.elements[index].particle1 == m_CursorElement.particle2)
                                     rope.elements[index].particle1 = m_CursorElement.particle1;
 
                                 m_CursorElement = rope.elements[index];
                             }
                             else
-                                m_CursorElement = rope.elements[Mathf.Max(0,index - 1)];
+                                m_CursorElement = rope.elements[Mathf.Max(0, index - 1)];
                         }
                         else // negative direction:
                         {
-                            RemoveParticleAt(solver.particleToActor[m_CursorElement.particle1].indexInActor);
-                            rope.elements.RemoveAt(index);
-
                             if (index > 0)
                             {
+                                RemoveParticleAt(solver.particleToActor[m_CursorElement.particle1].indexInActor);
+                                rope.elements.RemoveAt(index);
+
                                 if (rope.elements[index - 1].particle2 == m_CursorElement.particle1)
                                     rope.elements[index - 1].particle2 = m_CursorElement.particle2;
                                 m_CursorElement = rope.elements[index - 1];
@@ -264,6 +216,69 @@ namespace Obi
 
             // rebuild constraints:
             rope.RebuildConstraintsFromElements();
+
+            lengthChange = 0;
+        }
+
+        public void UpdateCursor()
+        {
+            rope = GetComponent<ObiRope>();
+            m_CursorElement = null;
+            if (rope.isLoaded)
+            {
+                float elmMu;
+                m_CursorElement = rope.GetElementAt(cursorMu, out elmMu);
+            }
+        }
+
+        public void UpdateSource()
+        {
+            rope = GetComponent<ObiRope>();
+            m_SourceIndex = -1;
+            if (rope.isLoaded)
+            {
+                float elmMu;
+                var elm = rope.GetElementAt(sourceMu, out elmMu);
+                if (elm != null && rope.solver != null)
+                {
+                    m_SourceIndex = elmMu < 0.5f ? elm.particle1 : elm.particle2;
+                }
+            }
+        }
+
+        private int AddParticleAt(int index)
+        {
+            int targetIndex = rope.activeParticleCount;
+
+            // Copy data from the particle where we will insert new particles, to the particles we will insert:
+            rope.CopyParticle(rope.solver.particleToActor[m_SourceIndex].indexInActor, targetIndex);
+
+            // Move the new particle to the one at the place where we will insert it:
+            rope.TeleportParticle(targetIndex, rope.solver.positions[rope.solverIndices[index]]);
+
+            // Activate the particle:
+            rope.ActivateParticle();
+            rope.SetRenderingDirty(Oni.RenderingSystemType.AllRopes);
+
+            return rope.solverIndices[targetIndex];
+        }
+
+        private void RemoveParticleAt(int index)
+        {
+            rope.DeactivateParticle(index);
+            rope.SetRenderingDirty(Oni.RenderingSystemType.AllRopes);
+        }
+
+        public float ChangeLength(float lengthChange)
+        {
+            // clamp new length to sane limits:
+            //newLength = Mathf.Clamp(newLength, 0, (rope.sourceBlueprint.particleCount - 1) * rope.ropeBlueprint.interParticleDistance);
+
+            // accumulate length change, we'll reset it to zero after it has been applied.
+            this.lengthChange += lengthChange;
+
+            // return new length:
+            return this.lengthChange + rope.restLength;
         }
     }
 }

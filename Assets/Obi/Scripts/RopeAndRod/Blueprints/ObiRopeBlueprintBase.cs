@@ -19,6 +19,7 @@ namespace Obi
         [HideInInspector] [SerializeField] protected int totalParticles;
         [HideInInspector] [SerializeField] protected float m_RestLength;
 
+        [HideInInspector] public int[] deformableEdges = null;    /**< Indices of deformable edges (2 per edge)*/
         [HideInInspector] public float[] restLengths;
 
         public float interParticleDistance
@@ -60,6 +61,37 @@ namespace Obi
         protected void ControlPointRemoved(int index)
         {
             RemoveParticleGroupAt(index);
+        }
+
+        protected virtual IEnumerator CreateAerodynamicConstraints()
+        {
+            aerodynamicConstraintsData = new ObiAerodynamicConstraintsData();
+            var aeroBatch = new ObiAerodynamicConstraintsBatch();
+            aerodynamicConstraintsData.AddBatch(aeroBatch);
+
+            for (int i = 0; i < totalParticles; i++)
+            {
+                aeroBatch.AddConstraint(i, 2 * principalRadii[i].x, 1, 1);
+
+                if (i % 500 == 0)
+                    yield return new CoroutineJob.ProgressInfo("ObiRope generating aerodynamic constraints...", i / (float)totalParticles);
+            }
+
+            // Set initial amount of active constraints:
+            for (int i = 0; i < aerodynamicConstraintsData.batches.Count; ++i)
+            {
+                aerodynamicConstraintsData.batches[i].activeConstraintCount = m_ActiveParticleCount;
+            }
+        }
+
+        protected void CreateDeformableEdges(int numSegments)
+        {
+            deformableEdges = new int[numSegments * 2];
+            for (int i = 0; i < numSegments; ++i)
+            {
+                deformableEdges[i * 2] = i % totalParticles;
+                deformableEdges[i * 2 + 1] = (i + 1) % totalParticles;
+            }
         }
 
         protected void CreateSimplices(int numSegments)

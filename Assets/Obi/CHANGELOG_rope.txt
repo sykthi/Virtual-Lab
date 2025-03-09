@@ -1,6 +1,92 @@
 # Change Log
 All notable changes to “Obi - Advanced ropes for Unity” will be documented in this file.
 
+
+## [7.0.3]
+
+### Added
+- Object layer support for all renderers.
+- New "Synchronous Fixed" solver synchronization mode, similar to Obi 6, offers tighter integration with rigidbody physics.
+- New "Tangled Ropes" sample scene.
+
+## [7.0.2]
+
+### Fixed
+- Solvers not placed at the scene origin would result in actors having incorrect motion blur in HDRP.
+- Fixed issue when disabling all solvers and colliders simultaneously: ipon re-enabling them, the colliders would be ignored.
+- Issue withe ElectricalSparks sample scene, ObiRopePrefabPlugger sample component may sometimes thorw an exception dependin on Unity's OnEnable call order.
+- Rope would sometimes disappear when using aerodynamic constraints with zero wind in Burst, due to a math.project returning NaN. Replaced with math.projectsafe.
+
+## [7.0.1]
+
+### Added
+- BakeMesh functionality to ObiRopeChainRenderer, you can now export baked chain meshes.
+- Render layer mask support to all rope renderers and particle renderers.
+
+### Fixed
+- Sceneview mouse lookaround in flytrough mode (right click + drag) didn't work in the path editor in Windows.
+- Having a ObiParticleRenderer with no material applied resulted in a exception in builds due GetInstanceID() returning 0 in editor but raising a nullref exception in the build.
+
+## [7.0]
+
+### Added
+- Compute shader based GPU solver backend.
+- More efficient solver update cycle, that also removes the need to have ObiUpdater components.
+- Aerodynamic constraint support for ObiRope, ObiRod and ObiBone.
+
+### Changed
+- Rendering system is now fully multithreaded, integrated with the solver backend.
+
+### Removed
+- Native library based 'Oni' solver backend.
+- ObiUpdater and all derived classes have been removed.
+
+## [6.5.1]
+
+### Added
+- Support for holes in terrain colliders.
+
+## [6.5]
+
+### Added
+- Improved constraint coloring, which results in much faster blueprint generation.
+
+### Fixed
+- Memory leak when using collision constraints in the Burst backend.
+- Performance drop when using collision constraints in Burst >1.7
+- Incorrect lighting on particles in the blueprint editor, when opening the editor without having previously opened any scene.
+
+## [6.4]
+
+### Added
+- Support for configurable enter play mode (domain and scene reload disabling).
+- Support for in-editor hot reloading.
+- Numerical fields to edit control point position and tangents added to the path editor.
+
+### Changed
+- Better path editor integration using Unity's editor custom tool API.
+- GrapplingHook sample scene now features a hook rope that extends over time, instead of extending instantly.
+- Reduced memory allocation in ObiPathSmoother Decimate() method.
+- Introduced a job handle pool to avoid runtime allocation of handles by both Burst and Oni backends.
+- Constraint padding array in Burst solver has been turned into a member variable instead of allocating anew it every frame.
+- Collision and friction batches are pooled instead of allocated every frame.
+
+### Fixed
+- InvalidOperationException when performing certain spatial queries with jobs debugger enabled in the Burst backend.
+- ObiBone collision category was internally resetting to zero upon pressing play.
+- Particle render mode in blueprint editor wasn't updated every frame under specific circumstances.
+
+## [6.3]
+
+### Added
+- New ObiBone actor, creates a particle-based representation of a bone hierarchy and simulates it using rod constraints.
+- Built-in support for applying solver gravity in world-space.
+
+### Fixed
+- Bug in attachments: prefab modifications were not being applied to the component.
+- Slight reduction in solver memory allocation.
+- Object disposed exception when using contact callbacks with a non-visible solver.
+
 ## [6.2]
 
 #IMPORTANT: If updating from an older version, you’ll need to readjust collision filtering in your scenes.

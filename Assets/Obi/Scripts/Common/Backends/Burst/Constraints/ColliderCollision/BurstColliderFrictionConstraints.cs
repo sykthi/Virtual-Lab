@@ -25,7 +25,7 @@ namespace Obi
 
         public override int GetConstraintCount()
         {
-            return ((BurstSolverImpl)solver).colliderContacts.Length;
+            return ((BurstSolverImpl)solver).abstraction.colliderContacts.count;
         }
     }
 }

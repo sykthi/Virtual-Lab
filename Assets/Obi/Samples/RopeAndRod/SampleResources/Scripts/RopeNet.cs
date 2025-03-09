@@ -17,10 +17,9 @@ public class RopeNet : MonoBehaviour
     void Awake()
     {
         // create an object containing both the solver and the updater:
-        GameObject solverObject = new GameObject("solver", typeof(ObiSolver), typeof(ObiFixedUpdater));
+        GameObject solverObject = new GameObject("solver", typeof(ObiSolver));
         ObiSolver solver = solverObject.GetComponent<ObiSolver>();
-        ObiFixedUpdater updater = solverObject.GetComponent<ObiFixedUpdater>();
-        updater.substeps = 2;
+        solver.substeps = 2;
 
         // adjust solver settings:
         solver.particleCollisionConstraintParameters.enabled = false;
@@ -28,9 +27,6 @@ public class RopeNet : MonoBehaviour
         solver.pinConstraintParameters.iterations = 4;
         solver.parameters.sleepThreshold = 0.001f;
         solver.PushSolverParameters();
-
-        // add the solver to the updater:
-        updater.solvers.Add(solver);
 
         // create the net (ropes + rigidbodies)
         CreateNet(solver);
@@ -45,10 +41,10 @@ public class RopeNet : MonoBehaviour
             for (int y = 0; y <= resolution.y; ++y)
             {
                 GameObject rb = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                rb.AddComponent<Rigidbody>();
                 rb.transform.position = new Vector3(x, y, 0) * size;
                 rb.transform.localScale = new Vector3(nodeSize, nodeSize, nodeSize);
 
+                rb.AddComponent<Rigidbody>();
                 nodes[x, y] = rb.AddComponent<ObiCollider>();
                 nodes[x, y].Filter = 1;
             }
@@ -68,7 +64,7 @@ public class RopeNet : MonoBehaviour
                     var rope = CreateRope(pos + offset, pos + new Vector3(size.x, 0, 0) - offset);
                     rope.transform.parent = solver.transform;
 
-                    PinRope(rope, nodes[x, y], nodes[x + 1, y], new Vector3(0.5f, 0, 0), -new Vector3(0.5f, 0, 0));
+                    PinRope(rope, nodes[x, y], nodes[x + 1, y]);
                 }
 
                 if (y < resolution.y)
@@ -77,22 +73,25 @@ public class RopeNet : MonoBehaviour
                     var rope = CreateRope(pos + offset, pos + new Vector3(0, size.y, 0) - offset);
                     rope.transform.parent = solver.transform;
 
-                    PinRope(rope, nodes[x, y], nodes[x, y + 1], new Vector3(0, 0.5f, 0), -new Vector3(0, 0.5f, 0));
+                    PinRope(rope, nodes[x, y], nodes[x, y + 1]);
                 }
             }
         }
     }
 
-    private void PinRope(ObiRope rope, ObiCollider bodyA, ObiCollider bodyB, Vector3 offsetA, Vector3 offsetB)
+    private void PinRope(ObiRope rope, ObiCollider bodyA, ObiCollider bodyB)
     {
-        // Pin both ends of the rope (this enables two-way interaction between character and rope):
-        var pinConstraints = rope.GetConstraintsByType(Oni.ConstraintType.Pin) as ObiConstraints<ObiPinConstraintsBatch>;
-        pinConstraints.Clear();
-        var batch = new ObiPinConstraintsBatch();
-        batch.AddConstraint(rope.solverIndices[0], bodyA, offsetA, Quaternion.identity, 0, 999, float.PositiveInfinity);
-        batch.AddConstraint(rope.solverIndices[rope.activeParticleCount - 1], bodyB, offsetB, Quaternion.identity, 0, 999, float.PositiveInfinity);
-        batch.activeConstraintCount = 2;
-        pinConstraints.AddBatch(batch);
+        var A = rope.gameObject.AddComponent<ObiParticleAttachment>();
+        var B = rope.gameObject.AddComponent<ObiParticleAttachment>();
+
+        A.attachmentType = ObiParticleAttachment.AttachmentType.Dynamic;
+        B.attachmentType = ObiParticleAttachment.AttachmentType.Dynamic;
+
+        A.target = bodyA.transform;
+        B.target = bodyB.transform;
+
+        A.particleGroup = rope.ropeBlueprint.groups[0];
+        B.particleGroup = rope.ropeBlueprint.groups[1];
     }
 
     // Creates a rope between two points in world space:
@@ -102,7 +101,7 @@ public class RopeNet : MonoBehaviour
         var ropeObject = new GameObject("solver", typeof(ObiRope), typeof(ObiRopeLineRenderer));
         var rope = ropeObject.GetComponent<ObiRope>();
         var ropeRenderer = ropeObject.GetComponent<ObiRopeLineRenderer>();
-        rope.GetComponent<MeshRenderer>().material = material;
+        rope.GetComponent<ObiRopeLineRenderer>().material = material;
         rope.GetComponent<ObiPathSmoother>().decimation = 0.1f;
         ropeRenderer.uvScale = new Vector2(1, 5);
 

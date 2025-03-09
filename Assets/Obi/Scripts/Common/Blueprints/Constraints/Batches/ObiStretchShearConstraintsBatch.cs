@@ -116,7 +116,9 @@ namespace Obi
 
                 restLengths.CopyFrom(batch.restLengths, 0, m_ActiveConstraintCount, batch.activeConstraintCount);
                 restOrientations.CopyFrom(batch.restOrientations, 0, m_ActiveConstraintCount, batch.activeConstraintCount);
-                stiffnesses.CopyReplicate(new Vector3(user.stretchCompliance, user.shear1Compliance, user.shear2Compliance), m_ActiveConstraintCount, batch.activeConstraintCount);
+
+                for (int i = 0; i < batch.activeConstraintCount; ++i)
+                    stiffnesses[m_ActiveConstraintCount + i] = user.GetStretchShearCompliance(batch, i);
 
                 for (int i = 0; i < batch.activeConstraintCount * 2; ++i)
                     particleIndices[m_ActiveConstraintCount * 2 + i] = actor.solverIndices[batch.particleIndices[i]];
@@ -139,6 +141,13 @@ namespace Obi
 
         public override void RemoveFromSolver(ObiSolver solver)
         {
+            base.RemoveFromSolver(solver);
+
+            orientationIndices.Dispose();
+            restLengths.Dispose();
+            restOrientations.Dispose();
+            stiffnesses.Dispose();
+
             //Remove batch:
             solver.implementation.DestroyConstraintsBatch(m_BatchImpl as IConstraintsBatchImpl);
         }

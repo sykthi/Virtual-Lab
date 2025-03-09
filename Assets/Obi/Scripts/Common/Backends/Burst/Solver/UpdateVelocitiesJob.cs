@@ -12,7 +12,7 @@ namespace Obi
     [BurstCompile]
     struct UpdateVelocitiesJob : IJobParallelFor
     {
-        [ReadOnly] public NativeList<int> activeParticles;
+        [ReadOnly] public NativeArray<int> activeParticles;
 
         // linear/position properties:
         [ReadOnly] public NativeArray<float> inverseMasses;
@@ -24,7 +24,7 @@ namespace Obi
         [ReadOnly] public NativeArray<float> inverseRotationalMasses;
         [ReadOnly] public NativeArray<quaternion> previousOrientations;
         [NativeDisableParallelForRestriction] public NativeArray<quaternion> orientations;
-        [NativeDisableParallelForRestriction] [WriteOnly] public NativeArray<float4> angularVelocities;
+        [NativeDisableParallelForRestriction] public NativeArray<float4> angularVelocities;
 
         [ReadOnly] public float deltaTime;
         [ReadOnly] public bool is2D;
@@ -41,11 +41,6 @@ namespace Obi
                 float4 pos = positions[i];
                 pos[2] = previousPositions[i][2];
                 positions[i] = pos;
-
-                // restrict rotation to the axis perpendicular to the 2D plane.
-                quaternion swing, twist;
-                BurstMath.SwingTwist(orientations[i], new float3(0, 0, 1), out swing, out twist);
-                orientations[i] = twist;
             }
 
             if (inverseMasses[i] > 0)
@@ -54,7 +49,7 @@ namespace Obi
                 velocities[i] = float4.zero;
 
             if (inverseRotationalMasses[i] > 0)
-                angularVelocities[i] = BurstIntegration.DifferentiateAngular(orientations[i], previousOrientations[i], deltaTime);
+                angularVelocities[i] = new float4(BurstIntegration.DifferentiateAngular(orientations[i], previousOrientations[i], deltaTime).xyz, angularVelocities[i].w);
             else
                 angularVelocities[i] = float4.zero;
         }

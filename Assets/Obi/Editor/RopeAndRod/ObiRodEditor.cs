@@ -1,4 +1,5 @@
 using UnityEditor;
+using UnityEditor.EditorTools;
 using UnityEditorInternal;
 using UnityEngine;
 using System;
@@ -16,11 +17,12 @@ namespace Obi
         static void CreateObiRod(MenuCommand menuCommand)
         {
             GameObject go = new GameObject("Obi Rod", typeof(ObiRod), typeof(ObiRopeExtrudedRenderer));
+            var renderer = go.GetComponent<ObiRopeExtrudedRenderer>();
+            renderer.material = ObiEditorUtils.GetDefaultMaterial();
             ObiEditorUtils.PlaceActorRoot(go, menuCommand);
         }
 
         ObiRod actor;
-        ObiPathEditor pathEditor;
 
         SerializedProperty rodBlueprint;
 
@@ -40,10 +42,12 @@ namespace Obi
         SerializedProperty plasticYield;
         SerializedProperty plasticCreep;
 
+        SerializedProperty aerodynamicsEnabled;
+        SerializedProperty drag;
+        SerializedProperty lift;
+
         SerializedProperty chainConstraintsEnabled;
         SerializedProperty tightness;
-
-        protected bool editMode = false;
 
         GUIStyle editLabelStyle;
 
@@ -69,29 +73,30 @@ namespace Obi
             plasticYield = serializedObject.FindProperty("_plasticYield");
             plasticCreep = serializedObject.FindProperty("_plasticCreep");
 
+            aerodynamicsEnabled = serializedObject.FindProperty("_aerodynamicsEnabled");
+            drag = serializedObject.FindProperty("_drag");
+            lift = serializedObject.FindProperty("_lift");
+
             chainConstraintsEnabled = serializedObject.FindProperty("_chainConstraintsEnabled");
             tightness = serializedObject.FindProperty("_tightness");
-        }
-
-        public void OnDisable()
-        {
-            Tools.hidden = false;
         }
 
         private void DoEditButton()
         {
             using (new EditorGUI.DisabledScope(actor.rodBlueprint == null))
             {
-                if (!GUI.enabled)
-                    Tools.hidden = editMode = false;
-
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Space(EditorGUIUtility.labelWidth);
                 EditorGUI.BeginChangeCheck();
-                Tools.hidden = editMode = GUILayout.Toggle(editMode, new GUIContent(Resources.Load<Texture2D>("EditCurves")), "Button", GUILayout.MaxWidth(36), GUILayout.MaxHeight(24));
+                bool edit = GUILayout.Toggle(ToolManager.activeToolType == typeof(ObiPathEditor), new GUIContent(Resources.Load<Texture2D>("EditCurves")), "Button", GUILayout.MaxWidth(36), GUILayout.MaxHeight(24));
                 EditorGUILayout.LabelField("Edit path", editLabelStyle, GUILayout.ExpandHeight(true), GUILayout.MaxHeight(24));
                 if (EditorGUI.EndChangeCheck())
                 {
+                    if (edit)
+                        ToolManager.SetActiveTool<ObiPathEditor>();
+                    else
+                        ToolManager.RestorePreviousPersistentTool();
+
                     SceneView.RepaintAll();
                 }
                 EditorGUILayout.EndHorizontal();
@@ -100,9 +105,6 @@ namespace Obi
 
         public override void OnInspectorGUI()
         {
-            if (actor.rodBlueprint != null && pathEditor == null)
-                pathEditor = new ObiPathEditor(actor.rodBlueprint, actor.rodBlueprint.path, true);
-
             if (editLabelStyle == null)
             {
                 editLabelStyle = new GUIStyle(GUI.skin.label);
@@ -111,13 +113,37 @@ namespace Obi
 
             serializedObject.UpdateIfRequiredOrScript();
 
-            if (pathEditor != null)
-                pathEditor.ResizeCPArrays();
-
-            using (new EditorGUI.DisabledScope(editMode))
+            if (actor.rodBlueprint != null && actor.rodBlueprint.path.ControlPointCount < 2)
             {
+                actor.rodBlueprint.GenerateImmediate();
+            }
+
+            using (new EditorGUI.DisabledScope(ToolManager.activeToolType == typeof(ObiPathEditor)))
+            {
+                GUILayout.BeginHorizontal();
+
                 EditorGUI.BeginChangeCheck();
+
                 EditorGUILayout.PropertyField(rodBlueprint, new GUIContent("Blueprint"));
+
+                if (actor.rodBlueprint == null)
+                {
+                    if (GUILayout.Button("Create", EditorStyles.miniButton, GUILayout.MaxWidth(80)))
+                    {
+                        string path = EditorUtility.SaveFilePanel("Save blueprint", "Assets/", "RodBlueprint", "asset");
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            path = FileUtil.GetProjectRelativePath(path);
+                            ObiRodBlueprint asset = ScriptableObject.CreateInstance<ObiRodBlueprint>();
+
+                            AssetDatabase.CreateAsset(asset, path);
+                            AssetDatabase.SaveAssets();
+
+                            actor.rodBlueprint = asset;
+                        }
+                    }
+                }
+
                 if (EditorGUI.EndChangeCheck())
                 {
                     foreach (var t in targets)
@@ -129,15 +155,11 @@ namespace Obi
                     foreach (var t in targets)
                         (t as ObiRod).AddToSolver();
                 }
+
+                GUILayout.EndHorizontal();
             }
 
             DoEditButton();
-
-
-            if (actor.rodBlueprint != null && actor.rodBlueprint.path.ControlPointCount < 2)
-            {
-                actor.rodBlueprint.GenerateImmediate();
-            }
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Collisions", EditorStyles.boldLabel);
@@ -146,20 +168,26 @@ namespace Obi
             EditorGUILayout.PropertyField(surfaceCollisions, new GUIContent("Surface-based collisions"));
 
             EditorGUILayout.Space();
-            ObiEditorUtils.DoToggleablePropertyGroup(stretchShearConstraintsEnabled, new GUIContent("StretchShear Constraints", Resources.Load<Texture2D>("Icons/ObiStretchShearConstraints Icon")),
+            ObiEditorUtils.DoToggleablePropertyGroup(stretchShearConstraintsEnabled, new GUIContent("Stretch & Shear Constraints", Resources.Load<Texture2D>("Icons/ObiStretchShearConstraints Icon")),
             () => {
                 EditorGUILayout.PropertyField(stretchCompliance, new GUIContent("Stretch compliance"));
-                EditorGUILayout.PropertyField(shear1Compliance, new GUIContent("Shear compliance 1"));
-                EditorGUILayout.PropertyField(shear2Compliance, new GUIContent("Shear compliance 2"));
+                EditorGUILayout.PropertyField(shear1Compliance, new GUIContent("Shear compliance X"));
+                EditorGUILayout.PropertyField(shear2Compliance, new GUIContent("Shear compliance Y"));
             });
 
-            ObiEditorUtils.DoToggleablePropertyGroup(bendTwistConstraintsEnabled, new GUIContent("Bend Twist Constraints", Resources.Load<Texture2D>("Icons/ObiBendTwistConstraints Icon")),
+            ObiEditorUtils.DoToggleablePropertyGroup(bendTwistConstraintsEnabled, new GUIContent("Bend & Twist Constraints", Resources.Load<Texture2D>("Icons/ObiBendTwistConstraints Icon")),
             () => {
                 EditorGUILayout.PropertyField(torsionCompliance, new GUIContent("Torsion compliance"));
-                EditorGUILayout.PropertyField(bend1Compliance, new GUIContent("Bend compliance 1"));
-                EditorGUILayout.PropertyField(bend2Compliance, new GUIContent("Bend compliance 2"));
+                EditorGUILayout.PropertyField(bend1Compliance, new GUIContent("Bend compliance X"));
+                EditorGUILayout.PropertyField(bend2Compliance, new GUIContent("Bend compliance Y"));
                 EditorGUILayout.PropertyField(plasticYield, new GUIContent("Plastic yield"));
                 EditorGUILayout.PropertyField(plasticCreep, new GUIContent("Plastic creep"));
+            });
+
+            ObiEditorUtils.DoToggleablePropertyGroup(aerodynamicsEnabled, new GUIContent("Aerodynamics", Resources.Load<Texture2D>("Icons/ObiAerodynamicConstraints Icon")),
+            () => {
+                EditorGUILayout.PropertyField(drag, new GUIContent("Drag"));
+                EditorGUILayout.PropertyField(lift, new GUIContent("Lift"));
             });
 
             ObiEditorUtils.DoToggleablePropertyGroup(chainConstraintsEnabled, new GUIContent("Chain Constraints", Resources.Load<Texture2D>("Icons/ObiChainConstraints Icon")),
@@ -171,18 +199,6 @@ namespace Obi
             if (GUI.changed)
                 serializedObject.ApplyModifiedProperties();
 
-        }
-
-        public void OnSceneGUI()
-        {
-            if (!editMode || actor.rodBlueprint == null || actor.rodBlueprint.path.ControlPointCount < 2)
-                return;
-
-            if (pathEditor.OnSceneGUI(actor.rodBlueprint.thickness, actor.transform.localToWorldMatrix))
-            {
-                Repaint();
-                pathEditor.needsRepaint = false;
-            }
         }
 
         [DrawGizmo(GizmoType.Selected)]

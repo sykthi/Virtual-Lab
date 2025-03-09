@@ -1,10 +1,6 @@
 using UnityEditor;
-using UnityEditorInternal;
+using UnityEditor.EditorTools;
 using UnityEngine;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-
 
 namespace Obi
 {
@@ -17,11 +13,12 @@ namespace Obi
         static void CreateObiRope(MenuCommand menuCommand)
         {
             GameObject go = new GameObject("Obi Rope", typeof(ObiRope), typeof(ObiRopeExtrudedRenderer));
+            var renderer = go.GetComponent<ObiRopeExtrudedRenderer>();
+            renderer.material = ObiEditorUtils.GetDefaultMaterial();
             ObiEditorUtils.PlaceActorRoot(go, menuCommand);
         }
 
         ObiRope actor;
-        ObiPathEditor pathEditor;
 
         SerializedProperty ropeBlueprint;
 
@@ -40,11 +37,13 @@ namespace Obi
         SerializedProperty plasticYield;
         SerializedProperty plasticCreep;
 
+        SerializedProperty aerodynamicsEnabled;
+        SerializedProperty drag;
+        SerializedProperty lift;
+
         SerializedProperty tearingEnabled;
         SerializedProperty tearResistanceMultiplier;
         SerializedProperty tearRate;
-
-        protected bool editMode = false;
 
         GUIStyle editLabelStyle;
 
@@ -69,31 +68,32 @@ namespace Obi
             plasticYield = serializedObject.FindProperty("_plasticYield");
             plasticCreep = serializedObject.FindProperty("_plasticCreep");
 
+            aerodynamicsEnabled = serializedObject.FindProperty("_aerodynamicsEnabled");
+            drag = serializedObject.FindProperty("_drag");
+            lift = serializedObject.FindProperty("_lift");
+
             tearingEnabled = serializedObject.FindProperty("tearingEnabled");
             tearResistanceMultiplier = serializedObject.FindProperty("tearResistanceMultiplier");
             tearRate = serializedObject.FindProperty("tearRate");
 
         }
 
-        public void OnDisable()
-        {
-            Tools.hidden = false;
-        }
-
         private void DoEditButton()
         {
             using (new EditorGUI.DisabledScope(actor.ropeBlueprint == null))
             {
-                if (!GUI.enabled)
-                    Tools.hidden = editMode = false;
-
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Space(EditorGUIUtility.labelWidth);
                 EditorGUI.BeginChangeCheck();
-                Tools.hidden = editMode = GUILayout.Toggle(editMode, new GUIContent(Resources.Load<Texture2D>("EditCurves")), "Button", GUILayout.MaxWidth(36), GUILayout.MaxHeight(24));
+                bool edit = GUILayout.Toggle(ToolManager.activeToolType == typeof(ObiPathEditor), new GUIContent(Resources.Load<Texture2D>("EditCurves")), "Button", GUILayout.MaxWidth(36), GUILayout.MaxHeight(24));
                 EditorGUILayout.LabelField("Edit path", editLabelStyle, GUILayout.ExpandHeight(true), GUILayout.MaxHeight(24));
                 if (EditorGUI.EndChangeCheck())
                 {
+                    if (edit)
+                        ToolManager.SetActiveTool<ObiPathEditor>();
+                    else
+                        ToolManager.RestorePreviousPersistentTool();
+
                     SceneView.RepaintAll();
                 }
                 EditorGUILayout.EndHorizontal();
@@ -102,10 +102,6 @@ namespace Obi
 
         public override void OnInspectorGUI()
         {
-
-            if (actor.ropeBlueprint != null && pathEditor == null)
-                pathEditor = new ObiPathEditor(actor.ropeBlueprint, actor.ropeBlueprint.path, false);
-
             if (editLabelStyle == null)
             {
                 editLabelStyle = new GUIStyle(GUI.skin.label);
@@ -114,13 +110,36 @@ namespace Obi
 
             serializedObject.UpdateIfRequiredOrScript();
 
-            if (pathEditor != null)
-                pathEditor.ResizeCPArrays();
-
-            using (new EditorGUI.DisabledScope(editMode))
+            if (actor.sourceBlueprint != null && actor.ropeBlueprint.path.ControlPointCount < 2)
             {
+                actor.ropeBlueprint.GenerateImmediate();
+            }
+
+            using (new EditorGUI.DisabledScope(ToolManager.activeToolType == typeof(ObiPathEditor)))
+            {
+                GUILayout.BeginHorizontal();
                 EditorGUI.BeginChangeCheck();
+
                 EditorGUILayout.PropertyField(ropeBlueprint, new GUIContent("Blueprint"));
+
+                if (actor.ropeBlueprint == null)
+                {
+                    if (GUILayout.Button("Create", EditorStyles.miniButton, GUILayout.MaxWidth(80)))
+                    {
+                        string path = EditorUtility.SaveFilePanel("Save blueprint", "Assets/", "RopeBlueprint", "asset");
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            path = FileUtil.GetProjectRelativePath(path);
+                            ObiRopeBlueprint asset = ScriptableObject.CreateInstance<ObiRopeBlueprint>();
+
+                            AssetDatabase.CreateAsset(asset, path);
+                            AssetDatabase.SaveAssets();
+
+                            actor.ropeBlueprint = asset;
+                        }
+                    }
+                }
+
                 if (EditorGUI.EndChangeCheck())
                 {
                     foreach (var t in targets)
@@ -132,15 +151,11 @@ namespace Obi
                     foreach (var t in targets)
                         (t as ObiRope).AddToSolver();
                 }
+
+                GUILayout.EndHorizontal();
             }
 
             DoEditButton();
-
-
-            if (actor.sourceBlueprint != null && actor.ropeBlueprint.path.ControlPointCount < 2)
-            {
-                actor.ropeBlueprint.GenerateImmediate();
-            }
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Collisions", EditorStyles.boldLabel);
@@ -172,22 +187,15 @@ namespace Obi
                 EditorGUILayout.PropertyField(plasticCreep, new GUIContent("Plastic creep"));
             });
 
+            ObiEditorUtils.DoToggleablePropertyGroup(aerodynamicsEnabled, new GUIContent("Aerodynamics", Resources.Load<Texture2D>("Icons/ObiAerodynamicConstraints Icon")),
+            () => {
+                EditorGUILayout.PropertyField(drag, new GUIContent("Drag"));
+                EditorGUILayout.PropertyField(lift, new GUIContent("Lift"));
+            });
 
             if (GUI.changed)
                 serializedObject.ApplyModifiedProperties();
 
-        }
-
-        public void OnSceneGUI()
-        {
-            if (!editMode || actor.ropeBlueprint == null || actor.ropeBlueprint.path.ControlPointCount < 2)
-                return;
-
-            if (pathEditor != null && pathEditor.OnSceneGUI(actor.ropeBlueprint.thickness, actor.transform.localToWorldMatrix))
-            {
-                Repaint();
-                pathEditor.needsRepaint = false;
-            }
         }
 
         [DrawGizmo(GizmoType.Selected)]

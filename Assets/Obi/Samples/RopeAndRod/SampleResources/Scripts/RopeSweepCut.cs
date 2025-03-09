@@ -12,17 +12,28 @@ public class RopeSweepCut : MonoBehaviour
     ObiRope rope;
     LineRenderer lineRenderer;
     Vector3 cutStartPosition;
+    Vector3 cutEndPosition;
+    bool cut;
 
     private void Awake()
     {
         rope = GetComponent<ObiRope>();
-
         AddMouseLine();
     }
 
     private void OnDestroy()
     {
         DeleteMouseLine();
+    }
+
+    private void OnEnable()
+    {
+        rope.OnSimulationStart += Rope_OnBeginSimulation;
+    }
+
+    private void OnDisable()
+    {
+        rope.OnSimulationStart -= Rope_OnBeginSimulation;
     }
 
     private void AddMouseLine()
@@ -52,6 +63,15 @@ public class RopeSweepCut : MonoBehaviour
         ProcessInput();
     }
 
+    private void Rope_OnBeginSimulation(ObiActor actor, float stepTime, float substepTime)
+    {
+        if (cut)
+        {
+            ScreenSpaceCut(cutStartPosition, cutEndPosition);
+            cut = false;
+        }
+    }
+
     /**
      * Very simple mouse-based input. Not ideal for multitouch screens as it only supports one finger, though.
      */
@@ -71,8 +91,9 @@ public class RopeSweepCut : MonoBehaviour
         // When the user lifts the mouse, proceed to cut.
         if (Input.GetMouseButtonUp(0))
         {
-            ScreenSpaceCut(cutStartPosition, Input.mousePosition);
+            cutEndPosition = Input.mousePosition;
             lineRenderer.enabled = false;
+            cut = true;
         }
     }
 
@@ -83,7 +104,7 @@ public class RopeSweepCut : MonoBehaviour
     private void ScreenSpaceCut(Vector2 lineStart, Vector2 lineEnd)
     {
         // keep track of whether the rope was cut or not.
-        bool cut = false;
+        bool ropeCut = false;
 
         // iterate over all elements and test them for intersection with the line:
         for (int i = 0; i < rope.elements.Count; ++i)
@@ -95,13 +116,13 @@ public class RopeSweepCut : MonoBehaviour
             // test if there's an intersection:
             if (SegmentSegmentIntersection(screenPos1, screenPos2, lineStart, lineEnd, out float r, out float s))
             {
-                cut = true;
+                ropeCut = true;
                 rope.Tear(rope.elements[i]);
             }
         }
 
         // If the rope was cut at any point, rebuilt constraints:
-        if (cut) rope.RebuildConstraintsFromElements();
+        if (ropeCut) rope.RebuildConstraintsFromElements();
     }
 
     /**
@@ -117,11 +138,11 @@ public class RopeSweepCut : MonoBehaviour
         float sNum = (A.y - C.y) * (B.x - A.x) - (A.x - C.x) * (B.y - A.y);
 
         if (Mathf.Approximately(rNum, 0) || Mathf.Approximately(denom, 0))
-        {  r = -1; s = -1; return false; }
+        { r = -1; s = -1; return false; }
 
         r = rNum / denom;
         s = sNum / denom;
 
-        return (r >= 0 && r <=1  && s >= 0 && s <= 1);
+        return (r >= 0 && r <= 1 && s >= 0 && s <= 1);
     }
 }

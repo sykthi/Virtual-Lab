@@ -42,6 +42,7 @@ namespace Obi
         bool DeactivateConstraint(int constraintIndex);
         bool ActivateConstraint(int constraintIndex);
         void DeactivateAllConstraints();
+        void ActivateAllConstraints();
 
         void Clear();
 
@@ -92,8 +93,6 @@ namespace Obi
         // Merges a batch from a given actor with this one.
         public virtual void Merge(ObiActor actor, IObiConstraintsBatch other)
         {
-            ObiConstraintsBatch batch = other as ObiConstraintsBatch;
-
             m_ConstraintCount += other.constraintCount;
             m_ActiveConstraintCount += other.activeConstraintCount;
             m_InitialActiveConstraintCount += other.initialActiveConstraintCount;
@@ -102,8 +101,12 @@ namespace Obi
 
         protected abstract void SwapConstraints(int sourceIndex, int destIndex);
         public abstract void GetParticlesInvolved(int index, List<int> particles);
-        public abstract void AddToSolver(ObiSolver solver);
-        public abstract void RemoveFromSolver(ObiSolver solver);
+
+        public virtual void AddToSolver(ObiSolver solver) { }
+        public virtual void RemoveFromSolver(ObiSolver solver) {
+            particleIndices.Dispose();
+            lambdas.Dispose();
+        }
 
         protected virtual void CopyConstraint(ObiConstraintsBatch batch, int constraintIndex) { }
 
@@ -176,6 +179,11 @@ namespace Obi
         public void DeactivateAllConstraints()
         {
             m_ActiveConstraintCount = 0;
+        }
+
+        public void ActivateAllConstraints()
+        {
+            m_ActiveConstraintCount = m_ConstraintCount;
         }
 
         // Swaps the constraint with the last one and reduces the amount of constraints by one.

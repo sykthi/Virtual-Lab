@@ -1,20 +1,55 @@
 using UnityEngine;
 using UnityEditor;
+using UnityEditor.EditorTools;
 using System;
+using UnityEditor.Overlays;
+using UnityEngine.UIElements;
 
 namespace Obi
 {
-    public class ObiPathEditor
+    [EditorTool("Obi Path Editor Tool",typeof(ObiRopeBase))]
+    public class ObiPathEditor : EditorTool
     {
-        UnityEngine.Object target;
+
+        [Overlay(typeof(SceneView), "Obi Path Editor", "Obi Path Editor", "Obi Path Editor", true)]
+        [Icon("Assets/Obi/Editor/Resources/EditCurves.psd")]
+        class PathEditorOverlay : Overlay, ITransientOverlay
+        {
+            public static ObiPathEditor editor;
+
+            public override VisualElement CreatePanelContent()
+            {
+                var root = new VisualElement();
+                root.Add(new IMGUIContainer(editor.DrawToolPanel));
+                return root;
+            }
+
+            // Use the visible property to hide or show this instance from within the class.
+            public bool visible
+            {
+                get
+                {
+                    return ToolManager.activeToolType == typeof(ObiPathEditor);
+                }
+            }
+        }
+
+        enum PathEditorTool
+        {
+            TranslatePoints,
+            RotatePoints,
+            ScalePoints,
+            OrientPoints,
+            InsertPoints,
+            RemovePoints
+        }
+
         ObiPath path;
 
         Quaternion prevRot = Quaternion.identity;
         Vector3 prevScale = Vector3.one;
 
-        bool insertTool = false;
-        bool removeTool = false;
-        bool orientTool = false;
+        PathEditorTool currentTool = PathEditorTool.TranslatePoints;
         bool showTangentHandles = true;
         bool showThicknessHandles = true;
 
@@ -27,14 +62,35 @@ namespace Obi
         protected bool useOrientation = false;
 
         protected static Color handleColor = new Color(1, 0.55f, 0.1f);
+        protected GUIContent m_IconContent;
 
-        public ObiPathEditor(UnityEngine.Object target, ObiPath path, bool useOrientation)
+        public override GUIContent toolbarIcon
         {
-            this.target = target;
-            this.path = path;
-            this.useOrientation = useOrientation;
-            selectedStatus = new bool[path.ControlPointCount];
-            ResizeCPArrays();
+            get
+            {
+                if (m_IconContent == null)
+                {
+                    m_IconContent = new GUIContent()
+                    {
+                        image = Resources.Load<Texture2D>("EditCurves"),
+                        text = "Obi Path Editor Tool",
+                        tooltip = "Obi Path Editor Tool"
+                    };
+                }
+                return m_IconContent;
+            }
+        }
+
+        ObiRopeBlueprintBase blueprint
+        {
+            get { return (target as ObiRopeBase).sharedBlueprint as ObiRopeBlueprintBase; }
+        }
+
+        public void OnEnable()
+        {
+            this.useOrientation = target is ObiRod;
+            selectedStatus = new bool[0];
+            PathEditorOverlay.editor = this;
         }
 
         public void ResizeCPArrays()
@@ -42,16 +98,17 @@ namespace Obi
             Array.Resize(ref selectedStatus, path.ControlPointCount);
         }
 
-        int windowId;
-        public bool OnSceneGUI(float thicknessScale, Matrix4x4 matrix)
+        public override void OnToolGUI(EditorWindow window)
         {
+            needsRepaint = false;
+
+            float thicknessScale = blueprint.thickness;
+            this.path = (target as ObiRopeBase).path;
+            var matrix = (target as ObiRopeBase).transform.localToWorldMatrix;
+
             ResizeCPArrays();
 
-            HandleUtility.AddDefaultControl(GUIUtility.GetControlID(FocusType.Passive));
-
-            // get a window ID:
-            if (Event.current.type != EventType.Used)
-                windowId = GUIUtility.GetControlID(FocusType.Passive);
+            HandleUtility.AddDefaultControl(GUIUtility.GetControlID("PathEditor".GetHashCode(), FocusType.Passive));
 
             Matrix4x4 prevMatrix = Handles.matrix;
             Handles.matrix = matrix;
@@ -63,9 +120,6 @@ namespace Obi
                 needsRepaint |= DrawControlPoint(i);
             }
 
-            // Control point selection handle:
-            needsRepaint |= ObiPathHandles.SplineCPSelector(path, selectedStatus);
-
             // Count selected and calculate average position:
             selectionAverage = GetControlPointAverage(out lastSelected, out selectedCount);
 
@@ -75,21 +129,21 @@ namespace Obi
             if (showThicknessHandles)
                 needsRepaint |= DoThicknessHandles(thicknessScale);
 
-            // Sceneview GUI:
-            Handles.BeginGUI();
-            GUILayout.Window(windowId, new Rect(10, 28, 0, 0), DrawUIWindow, "Path editor");
-            Handles.EndGUI();
+            // Control point selection handle:
+            needsRepaint |= ObiPathHandles.SplineCPSelector(path, selectedStatus);
 
             Handles.matrix = prevMatrix;
 
             // During edit mode, allow to add/remove control points.
-            if (insertTool)
+            if (currentTool == PathEditorTool.InsertPoints)
                 AddControlPointsMode(matrix);
 
-            if (removeTool)
+            if (currentTool == PathEditorTool.RemovePoints)
                 RemoveControlPointsMode(matrix);
 
-            return needsRepaint;
+            if (needsRepaint)
+                window.Repaint();
+
         }
 
         private void AddControlPointsMode(Matrix4x4 matrix)
@@ -109,7 +163,7 @@ namespace Obi
 
             if (Event.current.type == EventType.MouseDown && Event.current.modifiers == EventModifiers.None)
             {
-                Undo.RecordObject(target, "Add");
+                Undo.RecordObject(blueprint, "Add");
 
                 int newIndex = path.InsertControlPoint(mu);
                 if (newIndex >= 0)
@@ -148,7 +202,7 @@ namespace Obi
 
             if (Event.current.type == EventType.MouseDown && Event.current.modifiers == EventModifiers.None && index >= 0 && path.ControlPointCount > 2)
             {
-                Undo.RecordObject(target, "Remove");
+                Undo.RecordObject(blueprint, "Remove");
 
                 path.RemoveControlPoint(index);
                 ResizeCPArrays();
@@ -187,7 +241,7 @@ namespace Obi
                     Vector3 newTangent = Handles.PositionHandle(tangentPosition, Quaternion.identity);
                     if (EditorGUI.EndChangeCheck())
                     {
-                        Undo.RecordObject(target, "Modify tangent");
+                        Undo.RecordObject(blueprint, "Modify tangent");
                         wp.SetInTangentEndpoint(newTangent);
                         path.points[i] = wp;
                         path.FlushEvents();
@@ -207,7 +261,7 @@ namespace Obi
                     Vector3 newTangent = Handles.PositionHandle(tangentPosition, Quaternion.identity);
                     if (EditorGUI.EndChangeCheck())
                     {
-                        Undo.RecordObject(target, "Modify tangent");
+                        Undo.RecordObject(blueprint, "Modify tangent");
                         wp.SetOutTangentEndpoint(newTangent);
                         path.points[i] = wp;
                         path.FlushEvents();
@@ -222,7 +276,7 @@ namespace Obi
                 Handles.color = selectedStatus[i] ? handleColor : Color.white;
                 Vector3 pos = wp.position;
 
-                if (orientTool)
+                if (currentTool == PathEditorTool.OrientPoints)
                 {
                     Handles.ArrowHandleCap(0, pos, Quaternion.LookRotation(path.normals[i]), HandleUtility.GetHandleSize(pos), EventType.Repaint);
                 }
@@ -272,7 +326,7 @@ namespace Obi
                 prevRot = handleRotation;
                 prevScale = Vector3.one;
 
-                if (selectedCount == 1 && Tools.pivotRotation == PivotRotation.Local && orientTool)
+                if (selectedCount == 1 && Tools.pivotRotation == PivotRotation.Local && currentTool == PathEditorTool.OrientPoints)
                 {
                     //prevRot = Quaternion.LookRotation(GetNormal(lastSelected));
                 }
@@ -282,27 +336,27 @@ namespace Obi
             if (selectedCount > 0)
             {
 
-                if (useOrientation && orientTool)
+                if (useOrientation && currentTool == PathEditorTool.OrientPoints)
                 {
                     repaint |= OrientTool(selectionAverage, handleRotation);
                 }
                 else
                 {
-                    switch (Tools.current)
+                    switch (currentTool)
                     {
-                        case Tool.Move:
+                        case PathEditorTool.TranslatePoints:
                             {
                                 repaint |= MoveTool(selectionAverage, handleRotation);
                             }
                             break;
 
-                        case Tool.Scale:
+                        case PathEditorTool.ScalePoints:
                             {
                                 repaint |= ScaleTool(selectionAverage, handleRotation);
                             }
                             break;
 
-                        case Tool.Rotate:
+                        case PathEditorTool.RotatePoints:
                             {
                                 repaint |= RotateTool(selectionAverage, handleRotation);
                             }
@@ -321,7 +375,7 @@ namespace Obi
             if (EditorGUI.EndChangeCheck())
             {
 
-                Undo.RecordObject(target, "Move control point");
+                Undo.RecordObject(blueprint, "Move control point");
 
                 Vector3 delta = newPos - handlePosition;
 
@@ -353,7 +407,7 @@ namespace Obi
                 Vector3 deltaScale = new Vector3(scale.x / prevScale.x, scale.y / prevScale.y, scale.z / prevScale.z);
                 prevScale = scale;
 
-                Undo.RecordObject(target, "Scale control point");
+                Undo.RecordObject(blueprint, "Scale control point");
 
                 if (Tools.pivotMode == PivotMode.Center && selectedCount > 1)
                 {
@@ -392,6 +446,7 @@ namespace Obi
         {
 
             EditorGUI.BeginChangeCheck();
+
             // TODO: investigate weird rotation gizmo:
             Quaternion newRotation = Handles.RotationHandle(prevRot, handlePosition);
 
@@ -401,7 +456,7 @@ namespace Obi
                 Quaternion delta = newRotation * Quaternion.Inverse(prevRot);
                 prevRot = newRotation;
 
-                Undo.RecordObject(target, "Rotate control point");
+                Undo.RecordObject(blueprint, "Rotate control point");
 
                 if (Tools.pivotMode == PivotMode.Center && selectedCount > 1)
                 {
@@ -452,7 +507,7 @@ namespace Obi
                 Quaternion delta = newRotation * Quaternion.Inverse(prevRot);
                 prevRot = newRotation;
 
-                Undo.RecordObject(target, "Orient control point");
+                Undo.RecordObject(blueprint, "Orient control point");
 
                 // Rotate all selected control points around their average:
                 for (int i = 0; i < path.ControlPointCount; ++i)
@@ -481,27 +536,33 @@ namespace Obi
                 if (selectedStatus[i])
                 {
                     Vector3 position = path.points[i].position;
-                    Quaternion orientation = Quaternion.LookRotation(path.points.GetTangent(i));
 
-                    float offset = 0.05f;
-                    float thickness = (path.thicknesses[i] * scale) + offset;
-                    thickness = DoRadiusHandle(orientation, position, thickness);
-                    path.thicknesses[i] = Mathf.Max(0, (thickness - offset) / scale);
+                    var tangent = path.points.GetTangent(i);
+                    if (!tangent.Equals(Vector3.zero))
+                    {
+                        Quaternion orientation = Quaternion.LookRotation(tangent);
+
+                        float offset = 0.05f;
+                        float thickness = (path.thicknesses[i] * scale) + offset;
+
+                        EditorGUI.BeginChangeCheck();
+                        thickness = DoRadiusHandle(orientation, position, thickness);
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(blueprint, "Change control point thickness");
+                            path.thicknesses[i] = Mathf.Max(0, (thickness - offset) / scale);
+                            path.FlushEvents();
+                            return true;
+                        }
+                    }
                 }
             }
             Handles.color = oldColor;
 
-            if (EditorGUI.EndChangeCheck())
-            {
-                // TODO: add undo.
-                path.FlushEvents();
-                return true;
-            }
-
             return false;
         }
 
-        public void DrawUIWindow(int windowID)
+        public void DrawToolPanel()
         {
 
             DrawToolButtons();
@@ -515,45 +576,247 @@ namespace Obi
             GUILayout.BeginHorizontal();
 
             EditorGUI.BeginChangeCheck();
-            insertTool = GUILayout.Toggle(insertTool, new GUIContent(Resources.Load<Texture2D>("AddControlPoint"), "Add CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(42));
+            GUILayout.Toggle(currentTool == PathEditorTool.TranslatePoints, new GUIContent(Resources.Load<Texture2D>("TranslateControlPoint"), "Translate CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
             if (EditorGUI.EndChangeCheck())
             {
-                if (insertTool) removeTool = false;
+                currentTool = PathEditorTool.TranslatePoints;
             }
 
             EditorGUI.BeginChangeCheck();
-            removeTool = GUILayout.Toggle(removeTool, new GUIContent(Resources.Load<Texture2D>("RemoveControlPoint"), "Remove CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(42));
+            GUILayout.Toggle(currentTool == PathEditorTool.RotatePoints, new GUIContent(Resources.Load<Texture2D>("RotateControlPoint"), "Rotate CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
             if (EditorGUI.EndChangeCheck())
             {
-                if (removeTool) insertTool = false;
+                currentTool = PathEditorTool.RotatePoints;
             }
 
             EditorGUI.BeginChangeCheck();
-            bool closed = GUILayout.Toggle(path.Closed, new GUIContent(Resources.Load<Texture2D>("OpenCloseCurve"), "Open/Close the path"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(42));
+            GUILayout.Toggle(currentTool == PathEditorTool.ScalePoints, new GUIContent(Resources.Load<Texture2D>("ScaleControlPoint"), "Scale CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(target, "Open/close path");
+                currentTool = PathEditorTool.ScalePoints;
+            }
+
+            EditorGUI.BeginChangeCheck();
+            GUILayout.Toggle(currentTool == PathEditorTool.InsertPoints, new GUIContent(Resources.Load<Texture2D>("AddControlPoint"), "Add CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
+            if (EditorGUI.EndChangeCheck())
+            {
+                currentTool = PathEditorTool.InsertPoints;
+            }
+
+            EditorGUI.BeginChangeCheck();
+            GUILayout.Toggle(currentTool == PathEditorTool.RemovePoints, new GUIContent(Resources.Load<Texture2D>("RemoveControlPoint"), "Remove CPs"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
+            if (EditorGUI.EndChangeCheck())
+            {
+                currentTool = PathEditorTool.RemovePoints;
+            }
+
+            EditorGUI.BeginChangeCheck();
+            bool closed = GUILayout.Toggle(path.Closed, new GUIContent(Resources.Load<Texture2D>("OpenCloseCurve"), "Open/Close the path"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(blueprint, "Open/close path");
                 path.Closed = closed;
                 path.FlushEvents();
                 needsRepaint = true;
             }
 
             if (useOrientation)
-                orientTool = GUILayout.Toggle(orientTool, new GUIContent(Resources.Load<Texture2D>("OrientControlPoint"), "Orientation tool"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(42));
+            {
+                EditorGUI.BeginChangeCheck();
+                GUILayout.Toggle(currentTool == PathEditorTool.OrientPoints, new GUIContent(Resources.Load<Texture2D>("OrientControlPoint"), "Orientation tool"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
+                if (EditorGUI.EndChangeCheck())
+                {
+                    currentTool = PathEditorTool.OrientPoints;
+                }
+            }
 
-            showTangentHandles = GUILayout.Toggle(showTangentHandles, new GUIContent(Resources.Load<Texture2D>("ShowTangentHandles"), "Orientation tool"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(42));
-            showThicknessHandles = GUILayout.Toggle(showThicknessHandles, new GUIContent(Resources.Load<Texture2D>("ShowThicknessHandles"), "Orientation tool"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(42));
+            showTangentHandles = GUILayout.Toggle(showTangentHandles, new GUIContent(Resources.Load<Texture2D>("ShowTangentHandles"), "Show tangent handles"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
+            showThicknessHandles = GUILayout.Toggle(showThicknessHandles, new GUIContent(Resources.Load<Texture2D>("ShowThicknessHandles"), "Show thickness handles"), "Button", GUILayout.MaxHeight(24), GUILayout.Width(38));
 
             GUILayout.EndHorizontal();
+        }
+
+        private void DrawPositionField(Rect rect, string label, int index)
+        {
+            EditorGUI.showMixedValue = false;
+            float pos = 0;
+            bool firstSelected = true;
+            for (int i = 0; i < path.ControlPointCount; ++i)
+            {
+                if (selectedStatus[i])
+                {
+                    if (firstSelected)
+                    {
+                        pos = path.points[i].position[index];
+                        firstSelected = false;
+                    }
+                    else if (!Mathf.Approximately(pos,path.points[i].position[index]))
+                    {
+                        EditorGUI.showMixedValue = true;
+                        break;
+                    }
+                }
+            }
+
+            EditorGUI.BeginChangeCheck();
+                float oldLabelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = 10;
+                pos = EditorGUI.FloatField(rect, label, pos);
+                EditorGUIUtility.labelWidth = oldLabelWidth;
+                EditorGUI.showMixedValue = false;
+            if (EditorGUI.EndChangeCheck())
+            {
+
+                Undo.RecordObject(blueprint, "Change control points position");
+
+                for (int i = 0; i < path.ControlPointCount; ++i)
+                {
+                    if (selectedStatus[i])
+                    {
+                        var wp = path.points[i];
+                        wp.position[index] = pos;
+                        path.points[i] = wp;
+                    }
+                }
+                path.FlushEvents();
+                needsRepaint = true;
+            }
+        }
+
+        private void DrawInTangentField(Rect rect, string label, int index)
+        {
+            EditorGUI.showMixedValue = false;
+            float pos = 0;
+            bool firstSelected = true;
+            for (int i = 0; i < path.ControlPointCount; ++i)
+            {
+                if (selectedStatus[i])
+                {
+                    if (firstSelected)
+                    {
+                        pos = path.points[i].inTangent[index];
+                        firstSelected = false;
+                    }
+                    else if (!Mathf.Approximately(pos, path.points[i].inTangent[index]))
+                    {
+                        EditorGUI.showMixedValue = true;
+                        break;
+                    }
+                }
+            }
+
+            EditorGUI.BeginChangeCheck();
+                float oldLabelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = 10;
+                pos = EditorGUI.FloatField(rect, label, pos);
+                EditorGUIUtility.labelWidth = oldLabelWidth;
+                EditorGUI.showMixedValue = false;
+            if (EditorGUI.EndChangeCheck())
+            {
+
+                Undo.RecordObject(blueprint, "Change control points tangent");
+
+                for (int i = 0; i < path.ControlPointCount; ++i)
+                {
+                    if (selectedStatus[i])
+                    {
+                        var wp = path.points[i];
+                        var newInTangent = wp.inTangent;
+                        newInTangent[index] = pos;
+                        wp.SetInTangent(newInTangent);
+                        path.points[i] = wp;
+                    }
+                }
+                path.FlushEvents();
+                needsRepaint = true;
+            }
+        }
+
+        private void DrawOutTangentField(Rect rect, string label, int index)
+        {
+            EditorGUI.showMixedValue = false;
+            float pos = 0;
+            bool firstSelected = true;
+            for (int i = 0; i < path.ControlPointCount; ++i)
+            {
+                if (selectedStatus[i])
+                {
+                    if (firstSelected)
+                    {
+                        pos = path.points[i].outTangent[index];
+                        firstSelected = false;
+                    }
+                    else if (!Mathf.Approximately(pos, path.points[i].outTangent[index]))
+                    {
+                        EditorGUI.showMixedValue = true;
+                        break;
+                    }
+                }
+            }
+
+            EditorGUI.BeginChangeCheck();
+                float oldLabelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = 10;
+                pos = EditorGUI.FloatField(rect, label, pos);
+                EditorGUIUtility.labelWidth = oldLabelWidth;
+                EditorGUI.showMixedValue = false;
+            if (EditorGUI.EndChangeCheck())
+            {
+
+                Undo.RecordObject(blueprint, "Change control points tangent");
+
+                for (int i = 0; i < path.ControlPointCount; ++i)
+                {
+                    if (selectedStatus[i])
+                    {
+                        var wp = path.points[i];
+                        var newOutTangent = wp.outTangent;
+                        newOutTangent[index] = pos;
+                        wp.SetOutTangent(newOutTangent);
+                        path.points[i] = wp;
+                    }
+                }
+                path.FlushEvents();
+                needsRepaint = true;
+            }
         }
 
         private void DrawControlPointInspector()
         {
 
             GUI.enabled = selectedCount > 0;
+
+            bool wideMode = EditorGUIUtility.wideMode;
+            EditorGUIUtility.wideMode = true;
+            EditorGUIUtility.labelWidth = 100;
+
             EditorGUILayout.BeginVertical();
 
             GUILayout.Box("", ObiEditorUtils.GetSeparatorLineStyle());
+
+            // position:
+            var rect = EditorGUILayout.GetControlRect();
+            rect = EditorGUI.PrefixLabel(rect, GUIUtility.GetControlID(FocusType.Passive), new GUIContent("Position"));
+            rect.width /= 3.0f;
+            DrawPositionField(rect,"X",0); rect.x += rect.width;
+            DrawPositionField(rect,"Y",1); rect.x += rect.width;
+            DrawPositionField(rect,"Z",2); rect.x += rect.width;
+
+            // in tangent:
+            rect = EditorGUILayout.GetControlRect();
+            rect = EditorGUI.PrefixLabel(rect, GUIUtility.GetControlID(FocusType.Passive), new GUIContent("In Tangent"));
+            rect.width /= 3.0f;
+            DrawInTangentField(rect, "X", 0); rect.x += rect.width;
+            DrawInTangentField(rect, "Y", 1); rect.x += rect.width;
+            DrawInTangentField(rect, "Z", 2); rect.x += rect.width;
+
+            // out tangent:
+            rect = EditorGUILayout.GetControlRect();
+            rect = EditorGUI.PrefixLabel(rect, GUIUtility.GetControlID(FocusType.Passive), new GUIContent("Out Tangent"));
+            rect.width /= 3.0f;
+            DrawOutTangentField(rect, "X", 0); rect.x += rect.width;
+            DrawOutTangentField(rect, "Y", 1); rect.x += rect.width;
+            DrawOutTangentField(rect, "Z", 2); rect.x += rect.width;
 
             // tangent mode:
             EditorGUI.showMixedValue = false;
@@ -577,12 +840,12 @@ namespace Obi
             }
 
             EditorGUI.BeginChangeCheck();
-            var newMode = (ObiWingedPoint.TangentMode)EditorGUILayout.EnumPopup("Tangent mode", mode, GUI.skin.FindStyle("DropDown"), GUILayout.MinWidth(94));
+            var newMode = (ObiWingedPoint.TangentMode)EditorGUILayout.EnumPopup("Tangent mode", mode, GUILayout.MinWidth(94));
             EditorGUI.showMixedValue = false;
             if (EditorGUI.EndChangeCheck())
             {
 
-                Undo.RecordObject(target, "Change control points mode");
+                Undo.RecordObject(blueprint, "Change control points mode");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
@@ -624,7 +887,7 @@ namespace Obi
             if (EditorGUI.EndChangeCheck())
             {
 
-                Undo.RecordObject(target, "Change control point thickness");
+                Undo.RecordObject(blueprint, "Change control point thickness");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
@@ -662,7 +925,7 @@ namespace Obi
             if (EditorGUI.EndChangeCheck())
             {
 
-                Undo.RecordObject(target, "Change control point mass");
+                Undo.RecordObject(blueprint, "Change control point mass");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
@@ -702,7 +965,7 @@ namespace Obi
                 if (EditorGUI.EndChangeCheck())
                 {
 
-                    Undo.RecordObject(target, "Change control point rotational mass");
+                    Undo.RecordObject(blueprint, "Change control point rotational mass");
 
                     for (int i = 0; i < path.ControlPointCount; ++i)
                     {
@@ -740,7 +1003,7 @@ namespace Obi
             EditorGUI.showMixedValue = false;
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(target, "Change control point category");
+                Undo.RecordObject(blueprint, "Change control point category");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
@@ -777,7 +1040,7 @@ namespace Obi
             EditorGUI.showMixedValue = false;
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(target, "Change control point mask");
+                Undo.RecordObject(blueprint, "Change control point mask");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
@@ -810,12 +1073,12 @@ namespace Obi
             }
 
             EditorGUI.BeginChangeCheck();
-            color = EditorGUILayout.ColorField("Color", color, GUILayout.MinWidth(94));
+            color = EditorGUILayout.ColorField(new GUIContent("Color"), color, true, true, true, GUILayout.MinWidth(94));
             EditorGUI.showMixedValue = false;
             if (EditorGUI.EndChangeCheck())
             {
 
-                Undo.RecordObject(target, "Change control point color");
+                Undo.RecordObject(blueprint, "Change control point color");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
@@ -828,7 +1091,7 @@ namespace Obi
 
             // name:
             EditorGUI.showMixedValue = false;
-            string name = "";
+            string cpname = "";
             firstSelected = true;
             for (int i = 0; i < path.ControlPointCount; ++i)
             {
@@ -836,10 +1099,10 @@ namespace Obi
                 {
                     if (firstSelected)
                     {
-                        name = path.GetName(i);
+                        cpname = path.GetName(i);
                         firstSelected = false;
                     }
-                    else if (name != path.GetName(i))
+                    else if (cpname != path.GetName(i))
                     {
                         EditorGUI.showMixedValue = true;
                         break;
@@ -848,17 +1111,17 @@ namespace Obi
             }
 
             EditorGUI.BeginChangeCheck();
-            name = EditorGUILayout.DelayedTextField("Name", name, GUILayout.MinWidth(94));
+            cpname = EditorGUILayout.DelayedTextField("Name", cpname, GUILayout.MinWidth(94));
             EditorGUI.showMixedValue = false;
             if (EditorGUI.EndChangeCheck())
             {
 
-                Undo.RecordObject(target, "Change control point name");
+                Undo.RecordObject(blueprint, "Change control point name");
 
                 for (int i = 0; i < path.ControlPointCount; ++i)
                 {
                     if (selectedStatus[i])
-                        path.SetName(i, name);
+                        path.SetName(i, cpname);
                 }
                 path.FlushEvents();
                 needsRepaint = true;
@@ -866,6 +1129,8 @@ namespace Obi
 
 
             EditorGUILayout.EndVertical();
+
+            EditorGUIUtility.wideMode = wideMode;
 
             GUI.enabled = true;
         }
@@ -905,7 +1170,7 @@ namespace Obi
 
             for (int index = 0; index < 4; ++index)
             {
-                int controlId = GUIUtility.GetControlID("ObiPathThicknessHandle".GetHashCode(), FocusType.Keyboard);
+                int controlId = GUIUtility.GetControlID("ObiPathThicknessHandle".GetHashCode(), FocusType.Passive);
                 Vector3 position1 = position + radius * vector3Array[index];
                 bool changed = GUI.changed;
                 GUI.changed = false;
@@ -949,7 +1214,7 @@ namespace Obi
                         Vector2 currentPoint = HandleUtility.WorldToGUIPoint(path.m_Points.Evaluate(_p, p, p_, p__, i * step));
 
                         float mu;
-                        float distance = Vector2.SqrMagnitude((Vector2)ObiUtils.ProjectPointLine(screenPoint, lastPoint, currentPoint, out mu) - screenPoint);
+                        float distance = Vector2.SqrMagnitude((Vector2)ObiUtils.ProjectPointLine(lastPoint, currentPoint, screenPoint, out mu) - screenPoint);
 
                         if (distance < minDistance)
                         {

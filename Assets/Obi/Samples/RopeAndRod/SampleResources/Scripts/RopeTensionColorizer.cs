@@ -4,7 +4,6 @@ using UnityEngine;
 using Obi;
 
 [RequireComponent(typeof(ObiRope))]
-[RequireComponent(typeof(MeshRenderer))]
 public class RopeTensionColorizer : MonoBehaviour
 {
     public float minTension = 0;
@@ -22,8 +21,11 @@ public class RopeTensionColorizer : MonoBehaviour
     void Awake()
     {
 		rope = GetComponent<ObiRope>();
-        localMaterial = GetComponent<MeshRenderer>().material;
-	}
+        var rend = GetComponent<ObiRopeLineRenderer>();
+        localMaterial = Instantiate(rend.material);
+        rend.material = localMaterial;
+
+    }
 
     private void OnDestroy()
     {

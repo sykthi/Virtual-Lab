@@ -6,34 +6,38 @@ using Obi;
 [RequireComponent(typeof(ObiRope))]
 public class CursorController : MonoBehaviour
 {
-
-	ObiRopeCursor cursor;
-	ObiRope rope;
 	public float minLength = 0.1f;
     public float speed = 1;
 
-	// Use this for initialization
-	void Start ()
+    private ObiRopeCursor cursor;
+    private ObiRope rope;
+
+	void OnEnable ()
     {
         rope = GetComponent<ObiRope>();
         cursor = GetComponent<ObiRopeCursor>();
-	}
-	
-	// Update is called once per frame
-	void Update ()
+    }
+
+    void Update ()
     {
+        float change = 0;
+
 		if (Input.GetKey(KeyCode.W) && cursor != null)
         {
-            if (rope.restLength > minLength)
-                cursor.ChangeLength(rope.restLength - speed * Time.deltaTime);
+            change -= speed * Time.deltaTime;
 		}
 
 		if (Input.GetKey(KeyCode.S) && cursor != null)
         {
-            cursor.ChangeLength(rope.restLength + speed * Time.deltaTime);
+            change += speed * Time.deltaTime;
 		}
 
-		if (Input.GetKey(KeyCode.A)){
+        if (rope.restLength + change < minLength)
+            change = minLength - rope.restLength;
+
+        cursor.ChangeLength(change); 
+
+        if (Input.GetKey(KeyCode.A)){
 			rope.transform.Translate(Vector3.left * Time.deltaTime,Space.World);
 		}
 
