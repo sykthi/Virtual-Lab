@@ -173,6 +173,84 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1001 &7358683
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.123
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.819
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.032
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0.7071068
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: -90
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -4971967268499547125, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: ed84b27d4a8cb894fbc69b1487bf94fe, type: 2}
+    - target: {fileID: 731859018899233683, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: ed84b27d4a8cb894fbc69b1487bf94fe, type: 2}
+    - target: {fileID: 919132149155446097, guid: 1333e344191ee2f4ab8ac0c48660f277,
+        type: 3}
+      propertyPath: m_Name
+      value: Electric circuit fianl animation
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1333e344191ee2f4ab8ac0c48660f277, type: 3}
 --- !u!1 &76049417
 GameObject:
   m_ObjectHideFlags: 0
@@ -1037,74 +1115,6 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 2483171112249589647}
   m_PrefabAsset: {fileID: 0}
---- !u!1001 &407966298
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -0.4138
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0.817
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0.364
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: 35bc50d57fee40441abfa83f934d8c31,
-        type: 3}
-      propertyPath: m_Name
-      value: Electric circuit fianl animation
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 35bc50d57fee40441abfa83f934d8c31, type: 3}
 --- !u!1 &439394330
 GameObject:
   m_ObjectHideFlags: 0
@@ -6710,4 +6720,4 @@ SceneRoots:
   - {fileID: 1108419882275385816}
   - {fileID: 1966006691}
   - {fileID: 492010518}
-  - {fileID: 407966298}
+  - {fileID: 7358683}

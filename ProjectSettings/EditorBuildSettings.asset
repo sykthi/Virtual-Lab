@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Table.unity
     guid: b2f75bca9a73d6f46aa297dee6c8dbc0
+  - enabled: 1
+    path: Assets/Scenes/Vernier.unity
+    guid: 32c3fe729e9fbfe41836c715dc8522ef
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: e9391dcb34c0b0f44a87c72103817573,
       type: 2}

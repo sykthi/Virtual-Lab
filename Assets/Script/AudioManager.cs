@@ -27,6 +27,7 @@ public class AudioManager : MonoBehaviour
 
     public void Snap()
     {
+        Debug.Log("SOUND");
         _audioSource.PlayOneShot(_snapSound);
     }
 }
